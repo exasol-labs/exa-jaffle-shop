@@ -23,13 +23,12 @@ SOFTWARE.
 ---
 
 The dbt models (models/) and seed data (seeds/) in this repository are derived
-from the jaffle-shop project by dbt Labs:
+from the jaffle-shop project by dbt Labs (copyright dbt Labs):
 
   https://github.com/dbt-labs/jaffle-shop
 
-jaffle-shop is licensed under the Apache License, Version 2.0:
-
-  http://www.apache.org/licenses/LICENSE-2.0
+That repository does not carry a license file. Please consult it directly for
+current license terms and any requirements that may apply to derived works.
 
 Modifications were made to adapt the original models for the Exasol data
 platform and the dbt-fusion engine.

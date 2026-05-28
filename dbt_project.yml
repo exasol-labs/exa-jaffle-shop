@@ -14,12 +14,14 @@ clean-targets:
   - target
   - dbt_packages
 
+quoting:
+  database: false
+  schema: false
+  identifier: false
+
 seeds:
   exa_jaffle_shop:
     +schema: raw
-    jaffle-data:
-      +column_types:
-        id: VARCHAR(36)
 
 models:
   exa_jaffle_shop:

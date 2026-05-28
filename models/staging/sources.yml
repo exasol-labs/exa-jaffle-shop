@@ -2,7 +2,11 @@ version: 2
 
 sources:
   - name: ecom
-    schema: "{{ target.schema ~ '_raw' }}"
+    schema: "{{ target.schema ~ '_RAW' }}"
+    quoting:
+      database: false
+      schema: false
+      identifier: false
     tables:
       - name: raw_customers
       - name: raw_orders
