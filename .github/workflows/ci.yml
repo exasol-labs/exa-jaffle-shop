@@ -1,0 +1,118 @@
+name: CI – dbt-core & dbt-fusion vs Exasol
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  dbt:
+    name: dbt (${{ matrix.engine }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    continue-on-error: ${{ matrix.continue-on-error }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: dbt-core
+            dbt-target: python   # profiles.yml output: python (dbt-exasol / pyexasol)
+            continue-on-error: false
+
+          - engine: dbt-fusion
+            dbt-target: dev      # profiles.yml output: dev (dbt-fusion / ADBC)
+            continue-on-error: true   # known panic at sql_types.rs:207 — issue #2231
+
+    env:
+      EXASOL_HOST: localhost
+      EXASOL_PORT: "8563"
+      EXASOL_USER: sys
+      EXASOL_PASSWORD: exasol
+      DBT_PROFILES_DIR: ${{ github.workspace }}
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Start Exasol ──────────────────────────────────────────────────────────
+      # services: does not support --privileged; use docker run instead.
+      - name: Start Exasol container
+        run: |
+          docker run -d \
+            --name exasol \
+            --privileged \
+            --shm-size=2g \
+            -e COSLWD_ENABLED=1 \
+            -p 8563:8563 \
+            exasol/docker-db:2025.2.0
+
+      # ── Install exapump (readiness probe) ─────────────────────────────────────
+      - name: Install exapump
+        run: |
+          curl -fsSL \
+            https://github.com/exasol-labs/exapump/releases/download/v0.9.2/exapump-0.9.2-linux-x86_64 \
+            -o /usr/local/bin/exapump
+          chmod +x /usr/local/bin/exapump
+
+      # ── Wait for Exasol ───────────────────────────────────────────────────────
+      - name: Wait for Exasol to be ready
+        run: bash scripts/wait_for_exasol.sh exasol 600
+
+      # ── dbt-core setup ────────────────────────────────────────────────────────
+      - name: Set up Python
+        if: matrix.engine == 'dbt-core'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dbt-core + dbt-exasol
+        if: matrix.engine == 'dbt-core'
+        run: pip install "dbt-core==1.11.11" "dbt-exasol==1.10.6"
+
+      # ── dbt-fusion setup ──────────────────────────────────────────────────────
+      - name: Install dbt-fusion
+        if: matrix.engine == 'dbt-fusion'
+        run: |
+          curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh \
+            | sh -s -- --version 2.0.0-preview.178
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Exasol ADBC driver
+        if: matrix.engine == 'dbt-fusion'
+        run: |
+          curl -LsSf https://dbc.columnar.tech/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          dbc install exasol
+
+      # ── dbt-core: deps + seed + run ───────────────────────────────────────────
+      - name: dbt deps + seed + run (dbt-core)
+        if: matrix.engine == 'dbt-core'
+        run: |
+          dbt deps  --target ${{ matrix.dbt-target }}
+          dbt seed  --target ${{ matrix.dbt-target }}
+          dbt run   --target ${{ matrix.dbt-target }}
+
+      # ── dbt-fusion: deps + seed + run ─────────────────────────────────────────
+      # Expected to fail: panic in crates/sdf-adapter/src/sql_types.rs:207
+      # during dbt seed (issue #2231 / PR #2232 pending merge).
+      - name: dbt deps + seed + run (dbt-fusion)
+        if: matrix.engine == 'dbt-fusion'
+        env:
+          DBT_ALLOW_EXPERIMENTAL_ADAPTERS: "1"
+        run: |
+          ADBC_VER=$(dbc list | grep -i exasol | awk '{print $2}')
+          export LD_LIBRARY_PATH="$HOME/.config/adbc/drivers/exasol_linux_amd64_v${ADBC_VER}"
+          dbt deps --target ${{ matrix.dbt-target }}
+          dbt seed --target ${{ matrix.dbt-target }}
+          dbt run  --target ${{ matrix.dbt-target }}
+
+      # ── Diagnostics ───────────────────────────────────────────────────────────
+      - name: Dump Exasol container logs
+        if: failure()
+        run: docker logs --tail 100 exasol 2>&1 || true
+
+      - name: Stop Exasol container
+        if: always()
+        run: docker rm -f exasol || true
