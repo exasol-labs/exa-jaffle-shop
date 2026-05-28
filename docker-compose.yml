@@ -1,0 +1,8 @@
+services:
+  exasol:
+    image: exasol/docker-db:latest
+    ports:
+      - "8563:8563"
+      - "2580:2580"
+    privileged: true
+    stop_grace_period: 120s

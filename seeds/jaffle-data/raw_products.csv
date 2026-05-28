@@ -1,0 +1,7 @@
+sku,name,type,price,description
+JAF-001,Classic Jaffle,jaffle,1000,The original toasted sandwich with cheese and ham
+JAF-002,Nutella Jaffle,jaffle,1100,Sweet toasted sandwich with Nutella filling
+JAF-003,Veggie Jaffle,jaffle,900,Toasted sandwich with roasted vegetables
+BEV-001,Drip Coffee,beverage,400,Freshly brewed filter coffee
+BEV-002,Flat White,beverage,500,Double espresso with steamed milk
+BEV-003,Orange Juice,beverage,600,Freshly squeezed orange juice

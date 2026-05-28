@@ -1,0 +1,29 @@
+name: exa_jaffle_shop
+version: "1.0.0"
+config-version: 2
+
+profile: exa_jaffle_shop
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+test-paths: ["data-tests"]
+
+target-path: "target"
+clean-targets:
+  - target
+  - dbt_packages
+
+seeds:
+  exa_jaffle_shop:
+    +schema: raw
+    jaffle-data:
+      +column_types:
+        id: VARCHAR(36)
+
+models:
+  exa_jaffle_shop:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

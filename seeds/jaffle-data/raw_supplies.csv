@@ -1,0 +1,16 @@
+id,name,cost,perishable,sku
+1,Compostable Cutlery,7,false,JAF-001
+2,Napkins,2,false,JAF-001
+3,Serving Boat,10,false,JAF-001
+4,Compostable Cutlery,7,false,JAF-002
+5,Napkins,2,false,JAF-002
+6,Serving Boat,10,false,JAF-002
+7,Compostable Cutlery,7,false,JAF-003
+8,Napkins,2,false,JAF-003
+9,Serving Boat,10,false,JAF-003
+10,Paper Cup,5,false,BEV-001
+11,Napkins,2,false,BEV-001
+12,Paper Cup,5,false,BEV-002
+13,Napkins,2,false,BEV-002
+14,Paper Cup,5,false,BEV-003
+15,Napkins,2,false,BEV-003

@@ -1,0 +1,14 @@
+exa_jaffle_shop:
+  target: dev
+  outputs:
+    dev:
+      type: exasol
+      host: "{{ env_var('EXASOL_HOST', 'localhost') }}"
+      port: "{{ env_var('EXASOL_PORT', '8563') | int }}"
+      user: "{{ env_var('EXASOL_USER', 'sys') }}"
+      password: "{{ env_var('EXASOL_PASSWORD', 'exasol') }}"
+      schema: jaffle_shop
+      threads: 4
+      encryption: true
+      # Exasol Docker uses a self-signed certificate — skip validation
+      certificate_validation: false
