@@ -1,6 +1,13 @@
 # exa-jaffle-shop
 
-The [jaffle-shop](https://github.com/dbt-labs/jaffle-shop) demo project running on **Exasol** — validated with both [dbt-core](https://github.com/dbt-labs/dbt-core) (Python) and [dbt-fusion](https://github.com/dbt-labs/dbt-fusion) (Rust/ADBC).
+**[Jaffle Shop](https://github.com/dbt-labs/jaffle-shop)** is the canonical dbt sandbox project maintained by dbt Labs. It models a fictional restaurant that sells jaffles (toasted sandwich pies) and covers the full dbt workflow: raw CSV seeds → staging views → analytics-ready mart tables. The domain spans customers, orders, order items, products, supplies, and store locations — small enough to understand in an afternoon, realistic enough to exercise dbt's core features.
+
+This repository ports Jaffle Shop to **[Exasol](https://www.exasol.com)** and validates it against both dbt engines:
+
+| Engine | Transport | Status |
+|--------|-----------|--------|
+| [dbt-core](https://github.com/dbt-labs/dbt-core) + [dbt-exasol](https://alligatorcompany.gitlab.io/dbt-exasol) | Python / pyexasol | **PASS** |
+| [dbt-fusion](https://github.com/dbt-labs/dbt-fusion) | Rust / ADBC ([exarrow-rs](https://github.com/exasol-labs/exarrow-rs)) | **PASS** (fix branch) |
 
 Seeds load raw data, 6 staging views transform it, and 3 mart tables join everything together. PASS=9 on both engines.
 
