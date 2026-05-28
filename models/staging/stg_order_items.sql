@@ -1,4 +1,4 @@
-with source as (
+with src as (
     select * from {{ source('ecom', 'raw_items') }}
 ),
 
@@ -7,7 +7,7 @@ renamed as (
         id as order_item_id,
         order_id,
         sku as product_id
-    from source
+    from src
 )
 
 select * from renamed

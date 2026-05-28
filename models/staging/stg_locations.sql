@@ -1,4 +1,4 @@
-with source as (
+with src as (
     select * from {{ source('ecom', 'raw_stores') }}
 ),
 
@@ -8,7 +8,7 @@ renamed as (
         name as location_name,
         tax_rate,
         {{ dbt.date_trunc('day', 'opened_at') }} as opened_at
-    from source
+    from src
 )
 
 select * from renamed

@@ -1,4 +1,4 @@
-with source as (
+with src as (
     select * from {{ source('ecom', 'raw_products') }}
 ),
 
@@ -16,7 +16,7 @@ renamed as (
             when type = 'beverage' then true
             else false
         end as is_drink_item
-    from source
+    from src
 )
 
 select * from renamed
