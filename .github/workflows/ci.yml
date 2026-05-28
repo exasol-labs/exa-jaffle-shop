@@ -67,6 +67,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Cache pip packages
+        if: matrix.engine == 'dbt-core'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-dbt-exasol-1.11.11-1.10.6
+
       - name: Install dbt-core + dbt-exasol
         if: matrix.engine == 'dbt-core'
         run: pip install "dbt-core==1.11.11" "dbt-exasol==1.10.6"
@@ -85,6 +92,13 @@ jobs:
           curl -LsSf https://dbc.columnar.tech/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           dbc install exasol
+
+      # ── dbt_packages cache (both engines) ────────────────────────────────────
+      - name: Cache dbt_packages
+        uses: actions/cache@v4
+        with:
+          path: dbt_packages
+          key: dbt-packages-${{ hashFiles('package-lock.yml') }}
 
       # ── dbt-core: deps + seed + run ───────────────────────────────────────────
       - name: dbt deps + seed + run (dbt-core)
