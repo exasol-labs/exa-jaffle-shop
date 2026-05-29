@@ -28,11 +28,8 @@ curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --upda
 curl -LsSf https://dbc.columnar.tech/install.sh | sh
 dbc install exasol
 
-# 4. Set environment
-export DBT_ALLOW_EXPERIMENTAL_ADAPTERS=1
-export LD_LIBRARY_PATH=~/.config/adbc/drivers/exasol_linux_amd64_v$(
-  dbc list | grep exasol | awk '{print $2}'
-)
+# 4. Set environment (detects Linux / macOS / Windows automatically)
+source scripts/setup_fusion_env.sh
 
 # 5. Run
 dbt deps
@@ -40,7 +37,10 @@ dbt seed
 dbt run
 ```
 
-Or add `DBT_ALLOW_EXPERIMENTAL_ADAPTERS` and `LD_LIBRARY_PATH` to your shell profile to run plain `dbt run`.
+The script sets `DBT_ALLOW_EXPERIMENTAL_ADAPTERS=1` and the correct library path variable
+for your OS (`LD_LIBRARY_PATH` on Linux, `DYLD_LIBRARY_PATH` on macOS, `PATH` on Windows).
+Add `source /path/to/exa-jaffle-shop/scripts/setup_fusion_env.sh` to your shell profile
+to make it permanent.
 
 ### dbt-core (Python)
 
