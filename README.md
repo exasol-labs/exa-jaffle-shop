@@ -2,16 +2,45 @@
 
 **[Jaffle Shop](https://github.com/dbt-labs/jaffle-shop)** is the canonical dbt sandbox project maintained by dbt Labs. It models a fictional restaurant that sells jaffles (toasted sandwich pies) and covers the full dbt workflow: raw CSV seeds → staging views → analytics-ready mart tables. The domain spans customers, orders, order items, products, supplies, and store locations — small enough to understand in an afternoon, realistic enough to exercise dbt's core features.
 
-This repository ports Jaffle Shop to **[Exasol](https://www.exasol.com)** and validates it against both dbt engines:
+Using dbt with Exasol combines data orchestration with the high performance and scalability of an Exasol database. You can test this workflow with your existing Exasol database or set up a free Exasol instance via the [Exasol SaaS free trial](https://cloud.exasol.com) or the [Docker image](https://hub.docker.com/r/exasol/docker-db). This repository ports Jaffle Shop to **[Exasol](https://www.exasol.com)** and validates it against both dbt engines:
 
 | Engine | Transport | Status |
 |--------|-----------|--------|
-| [dbt-core](https://github.com/dbt-labs/dbt-core) + [dbt-exasol](https://alligatorcompany.gitlab.io/dbt-exasol) | Python / pyexasol | **PASS** |
 | [dbt-fusion](https://github.com/dbt-labs/dbt-fusion) | Rust / ADBC ([exarrow-rs](https://github.com/exasol-labs/exarrow-rs)) | **PASS** (fix branch) |
+| [dbt-core](https://github.com/dbt-labs/dbt-core) + [dbt-exasol](https://alligatorcompany.gitlab.io/dbt-exasol) | Python / pyexasol | **PASS** |
 
 Seeds load raw data, 6 staging views transform it, and 3 mart tables join everything together. PASS=9 on both engines.
 
 ## Quick Start
+
+### dbt-fusion
+
+> **Note:** The current release binary has a known seed issue — see [dbt-fusion Known Issues](#dbt-fusion-known-issues).
+
+```bash
+# 1. Start Exasol
+docker compose up -d && sleep 30
+
+# 2. Install dbt-fusion
+curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
+
+# 3. Install the Exasol ADBC driver
+curl -LsSf https://dbc.columnar.tech/install.sh | sh
+dbc install exasol
+
+# 4. Set environment
+export DBT_ALLOW_EXPERIMENTAL_ADAPTERS=1
+export LD_LIBRARY_PATH=~/.config/adbc/drivers/exasol_linux_amd64_v$(
+  dbc list | grep exasol | awk '{print $2}'
+)
+
+# 5. Run
+dbt deps
+dbt seed
+dbt run
+```
+
+Or add `DBT_ALLOW_EXPERIMENTAL_ADAPTERS` and `LD_LIBRARY_PATH` to your shell profile to run plain `dbt run`.
 
 ### dbt-core (Python)
 
@@ -24,43 +53,60 @@ python3 -m venv .venv
 .venv/bin/pip install dbt-exasol
 
 # 3. Run
-.venv/bin/dbt deps && .venv/bin/dbt seed --target python && .venv/bin/dbt run --target python
+.venv/bin/dbt deps
+.venv/bin/dbt seed --target python
+.venv/bin/dbt run --target python
 ```
 
-### dbt-fusion
+## Configuration
 
-The released binary `2.0.0-preview.178` has a known panic during `dbt seed` (see Compatibility Matrix). A fix has been submitted upstream — once merged and a new preview is released, the steps below will work.
+`profiles.yml` is included in the repository and pre-configured for the Exasol Docker container with default credentials. Override via environment variables:
 
-To test **now** using the fix branch, build `jaffle-run` from the fork (requires Rust):
+| Variable | Default | Description |
+|---|---|---|
+| `EXASOL_HOST` | `localhost` | Exasol hostname |
+| `EXASOL_PORT` | `8563` | Exasol port |
+| `EXASOL_USER` | `sys` | Database user |
+| `EXASOL_PASSWORD` | `exasol` | Password |
+
+> **TLS note:** Exasol Docker uses a self-signed certificate. `profiles.yml` sets `certificate_validation: false` (dbt-fusion) and `validate_server_certificate: false` (dbt-exasol). Do not use this in production.
+
+> **Schema casing:** Exasol stores identifiers as uppercase. `profiles.yml` uses uppercase `JAFFLE_SHOP` and `sources.yml` sets `quoting: identifier: false` so dbt passes identifiers unquoted (case-insensitive).
+
+## dbt-fusion Known Issues
+
+The released binary `2.0.0-preview.178` panics during `dbt seed`:
+
+```
+panic: not yet implemented
+  at crates/sdf-adapter/src/sql_types.rs:207
+```
+
+Tracked in [issue #2231](https://github.com/dbt-labs/dbt-fusion/issues/2231); fix submitted in [PR #2232](https://github.com/dbt-labs/dbt-fusion/pull/2232). Once merged and a new preview is released, the Quick Start steps above will work as-is.
+
+**Workaround — build from the fix branch (requires Rust):**
 
 ```bash
-git clone https://github.com/marconae/dbt-fusion-fork -b fix/exasol-adapt-seed-type
-cd dbt-fusion-fork && cargo build --release -p dbt-tasks-sa --bin jaffle-run
-# compile models
+git clone https://github.com/marconae/dbt-fusion-fork \
+  -b fix/exasol-adapt-seed-type
+
+cd dbt-fusion-fork
+
+cargo build --release \
+  -p dbt-tasks-sa \
+  --bin jaffle-run
+```
+
+```bash
+# Compile models
 dbt-sa-cli parse --project-dir <path-to-this-repo>
-# run seeds + models
-LD_LIBRARY_PATH=~/.config/adbc/drivers/exasol_linux_amd64_v$(dbc list | grep exasol | awk '{print $2}') \
-  ./target/release/jaffle-run <path-to-this-repo>
+
+# Run seeds + models
+export LD_LIBRARY_PATH=~/.config/adbc/drivers/exasol_linux_amd64_v$(
+  dbc list | grep exasol | awk '{print $2}'
+)
+./target/release/jaffle-run <path-to-this-repo>
 ```
-
-```bash
-# 1. Start Exasol
-docker compose up -d && sleep 30
-
-# 2. Install dbt-fusion (once the fix is released)
-curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
-
-# 3. Install the Exasol ADBC driver
-curl -LsSf https://dbc.columnar.tech/install.sh | sh
-dbc install exasol
-
-# 4. Run
-DBT_ALLOW_EXPERIMENTAL_ADAPTERS=1 \
-  LD_LIBRARY_PATH=~/.config/adbc/drivers/exasol_linux_amd64_v$(dbc list | grep exasol | awk '{print $2}') \
-  dbt deps && dbt seed && dbt run
-```
-
-Or set `DBT_ALLOW_EXPERIMENTAL_ADAPTERS` and `LD_LIBRARY_PATH` in your shell profile to run plain `dbt run`.
 
 ## Exasol Support for dbt
 
@@ -83,7 +129,8 @@ Both PRs are merged into `dbt-labs/dbt-fusion` main. The Exasol adapter code is 
 ```
 # in crates/dbt-loader/src/load_profiles.rs
 fn experimental_adapters_allowed() -> bool {
-    !dbt_env::env_var_is_disabled(ALLOW_EXPERIMENTAL_ADAPTERS_ENV)  // "DBT_ALLOW_EXPERIMENTAL_ADAPTERS"
+    !dbt_env::env_var_is_disabled(ALLOW_EXPERIMENTAL_ADAPTERS_ENV)
+    // "DBT_ALLOW_EXPERIMENTAL_ADAPTERS"
 }
 ```
 
@@ -94,23 +141,7 @@ The ADBC driver lives at [exasol-labs/exarrow-rs](https://github.com/exasol-labs
 | Engine | Version / Build | Tested | Result | Notes |
 |--------|----------------|--------|--------|-------|
 | [dbt-core](https://github.com/dbt-labs/dbt-core) + [dbt-exasol](https://alligatorcompany.gitlab.io/dbt-exasol) | dbt-core 1.11.11 / dbt-exasol 1.10.6 | Yes | **PASS** | All 9 models; uses `python` target in `profiles.yml` |
-| [dbt-fusion](https://github.com/dbt-labs/dbt-fusion) (released binary) | `2.0.0-preview.178` | Yes | **FAIL** | `panic: not yet implemented` at `crates/sdf-adapter/src/sql_types.rs:207` during `dbt seed` — [issue #2231](https://github.com/dbt-labs/dbt-fusion/issues/2231), [PR #2232](https://github.com/dbt-labs/dbt-fusion/pull/2232) |
 | [dbt-fusion](https://github.com/dbt-labs/dbt-fusion) (fix branch) | [`marconae/dbt-fusion-fork@fix/exasol-adapt-seed-type`](https://github.com/marconae/dbt-fusion-fork/tree/fix/exasol-adapt-seed-type) | Yes | **PASS** | `jaffle-run` binary (open-source components only): 6 seeds, 6 views, 3 tables, row counts verified; ADBC driver: exarrow-rs 0.12.0 |
-
-## Configuration
-
-`profiles.yml` is included in the repository and pre-configured for the Exasol Docker container with default credentials. Override via environment variables:
-
-| Variable | Default | Description |
-|---|---|---|
-| `EXASOL_HOST` | `localhost` | Exasol hostname |
-| `EXASOL_PORT` | `8563` | Exasol port |
-| `EXASOL_USER` | `sys` | Database user |
-| `EXASOL_PASSWORD` | `exasol` | Password |
-
-> **TLS note:** Exasol Docker uses a self-signed certificate. `profiles.yml` sets `certificate_validation: false` (dbt-fusion) and `validate_server_certificate: false` (dbt-exasol). Do not use this in production.
-
-> **Schema casing:** Exasol stores identifiers as uppercase. `profiles.yml` uses uppercase `JAFFLE_SHOP` and `sources.yml` sets `quoting: identifier: false` so dbt passes identifiers unquoted (case-insensitive).
 
 ## Exasol SQL Compatibility Notes
 
