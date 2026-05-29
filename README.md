@@ -113,12 +113,6 @@ fn experimental_adapters_allowed() -> bool {
 
 The ADBC driver lives at [exasol-labs/exarrow-rs](https://github.com/exasol-labs/exarrow-rs), a Rust ADBC implementation for Exasol.
 
-## Compatibility Matrix
-
-| Engine | Version / Build | Tested | Result | Notes |
-|--------|----------------|--------|--------|-------|
-| [dbt-core](https://github.com/dbt-labs/dbt-core) + [dbt-exasol](https://alligatorcompany.gitlab.io/dbt-exasol) | dbt-core 1.11.11 / dbt-exasol 1.10.6 | Yes | **PASS** | All 9 models; uses `python` target in `profiles.yml` |
-| [dbt-fusion](https://github.com/dbt-labs/dbt-fusion) (fix branch) | [`marconae/dbt-fusion-fork@fix/exasol-adapt-seed-type`](https://github.com/marconae/dbt-fusion-fork/tree/fix/exasol-adapt-seed-type) | Yes | **PASS** | `jaffle-run` binary (open-source components only): 6 seeds, 6 views, 3 tables, row counts verified; ADBC driver: exarrow-rs 0.12.0 |
 
 ## Exasol SQL Compatibility Notes
 
