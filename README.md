@@ -84,29 +84,6 @@ panic: not yet implemented
 
 Tracked in [issue #2231](https://github.com/dbt-labs/dbt-fusion/issues/2231); fix submitted in [PR #2232](https://github.com/dbt-labs/dbt-fusion/pull/2232). Once merged and a new preview is released, the Quick Start steps above will work as-is.
 
-**Workaround — build from the fix branch (requires Rust):**
-
-```bash
-git clone https://github.com/marconae/dbt-fusion-fork \
-  -b fix/exasol-adapt-seed-type
-
-cd dbt-fusion-fork
-
-cargo build --release \
-  -p dbt-tasks-sa \
-  --bin jaffle-run
-```
-
-```bash
-# Compile models
-dbt-sa-cli parse --project-dir <path-to-this-repo>
-
-# Run seeds + models
-export LD_LIBRARY_PATH=~/.config/adbc/drivers/exasol_linux_amd64_v$(
-  dbc list | grep exasol | awk '{print $2}'
-)
-./target/release/jaffle-run <path-to-this-repo>
-```
 
 ## Exasol Support for dbt
 
