@@ -58,31 +58,30 @@ jobs:
             needs-init-db: true    # ADBC driver cannot create schemas
             continue-on-error: false
 
-          # ── macOS ARM (Exasol via external instance — secrets required) ──
-          # exasol/docker-db is linux/amd64 only; native arm64 packages used for dbt
+          # ── macOS ARM (Exasol via exasol/nano — arm64 compatible) ────────
+          # exasol/docker-db is linux/amd64 only; exasol/nano:latest is multi-arch.
           - os: macos-latest
             engine: dbt-core-python
             dbt-target: python
-            use-docker: false
+            use-docker: true
             needs-init-db: false
-            continue-on-error: true
+            continue-on-error: false
 
           - os: macos-latest
             engine: dbt-core-v2
             dbt-target: dev
-            use-docker: false
+            use-docker: true
             needs-init-db: true
-            continue-on-error: true
+            continue-on-error: true   # alpha release
 
           - os: macos-latest
             engine: dbt-fusion
             dbt-target: dev
-            use-docker: false
+            use-docker: true
             needs-init-db: true
-            continue-on-error: true
+            continue-on-error: false
 
     env:
-      # Docker-local defaults; overridden by the "Configure external Exasol" step on macOS.
       EXASOL_HOST: localhost
       EXASOL_PORT: "8563"
       EXASOL_USER: sys
@@ -94,34 +93,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Configure external Exasol connection (macOS ARM only) ─────────────
-      # exasol/docker-db is linux/amd64 only; macOS jobs target an external instance.
-      # Requires EXASOL_HOST and EXASOL_PASSWORD repository secrets.
-      - name: Configure external Exasol connection
-        if: '!matrix.use-docker'
-        env:
-          _HOST: ${{ secrets.EXASOL_HOST }}
-          _PASSWORD: ${{ secrets.EXASOL_PASSWORD }}
-        run: |
-          echo "EXASOL_HOST=${_HOST}" >> "$GITHUB_ENV"
-          echo "EXASOL_PASSWORD=${_PASSWORD}" >> "$GITHUB_ENV"
-
       # ── Load Exasol Docker image from cache (Linux only) ─────────────────
+      # macOS pulls exasol/nano:latest directly (small image, arm64 native).
       - name: Restore Exasol Docker image from cache
-        if: matrix.use-docker
+        if: matrix.use-docker && matrix.os == 'ubuntu-latest'
         uses: actions/cache@v4
         with:
           path: /tmp/exasol-docker.tar.gz
           key: docker-exasol-2026.1.0
 
       - name: Load Exasol Docker image
-        if: matrix.use-docker
+        if: matrix.use-docker && matrix.os == 'ubuntu-latest'
         run: docker load < /tmp/exasol-docker.tar.gz
 
-      # ── Start Exasol (Linux / Docker only) ────────────────────────────────
+      # ── Start Exasol (all platforms, Docker) ─────────────────────────────
       # services: does not support --privileged; use docker run instead.
-      - name: Start Exasol container
-        if: matrix.use-docker
+      # Linux: exasol/docker-db needs --privileged + shm; macOS: nano is lighter.
+      - name: Start Exasol container (Linux)
+        if: matrix.use-docker && matrix.os == 'ubuntu-latest'
         run: |
           docker run -d \
             --name exasol \
@@ -130,6 +119,14 @@ jobs:
             -e COSLWD_ENABLED=1 \
             -p 8563:8563 \
             exasol/docker-db:2026.1.0
+
+      - name: Start Exasol container (macOS)
+        if: matrix.use-docker && matrix.os == 'macos-latest'
+        run: |
+          docker run -d \
+            --name exasol \
+            -p 8563:8563 \
+            exasol/nano:latest
 
       # ── Install exapump (health probe, cross-platform) ────────────────────
       - name: Install exapump
@@ -145,13 +142,8 @@ jobs:
           chmod +x /usr/local/bin/exapump
 
       # ── Wait for Exasol ───────────────────────────────────────────────────
-      - name: Wait for Exasol to be ready (Docker)
-        if: matrix.use-docker
+      - name: Wait for Exasol to be ready
         run: bash scripts/wait_for_exasol.sh exasol 600
-
-      - name: Wait for Exasol to be ready (external)
-        if: '!matrix.use-docker'
-        run: bash scripts/wait_for_exasol.sh "" 120
 
       # ── Initialize database (ADBC engines only) ──────────────────────────
       # dbt-exasol creates schemas automatically; the ADBC driver cannot.
