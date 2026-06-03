@@ -94,12 +94,11 @@ jobs:
         uses: actions/checkout@v4
 
       # ── Install Docker (macOS only) ───────────────────────────────────────
-      # macOS ARM runners do not ship Docker; install via Homebrew + Colima.
-      - name: Install Docker (colima + QEMU)
+      # macOS ARM runners do not ship Docker. Use the Docker-maintained action
+      # which handles colima setup with the correct flags for GitHub CI.
+      - name: Set up Docker (macOS)
         if: matrix.os == 'macos-latest'
-        run: |
-          brew install --quiet colima docker qemu
-          colima start --vm-type=qemu --cpu 2 --memory 4
+        uses: crazy-max/ghaction-setup-docker@v3
 
       # ── Load Exasol Docker image from cache (Linux only) ─────────────────
       # macOS pulls exasol/nano:latest directly (small image, arm64 native).
