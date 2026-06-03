@@ -93,6 +93,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Install Docker (macOS only) ───────────────────────────────────────
+      # macOS ARM runners do not ship Docker; install via Homebrew + Colima.
+      - name: Install Docker (colima)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install --quiet colima docker
+          colima start
+
       # ── Load Exasol Docker image from cache (Linux only) ─────────────────
       # macOS pulls exasol/nano:latest directly (small image, arm64 native).
       - name: Restore Exasol Docker image from cache
