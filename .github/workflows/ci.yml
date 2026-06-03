@@ -95,11 +95,11 @@ jobs:
 
       # ── Install Docker (macOS only) ───────────────────────────────────────
       # macOS ARM runners do not ship Docker; install via Homebrew + Colima.
-      - name: Install Docker (colima)
+      - name: Install Docker (colima + QEMU)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install --quiet colima docker
-          colima start
+          brew install --quiet colima docker qemu
+          colima start --vm-type=qemu --cpu 2 --memory 4
 
       # ── Load Exasol Docker image from cache (Linux only) ─────────────────
       # macOS pulls exasol/nano:latest directly (small image, arm64 native).
