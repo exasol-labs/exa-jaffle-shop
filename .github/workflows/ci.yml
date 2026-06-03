@@ -109,18 +109,13 @@ jobs:
         run: |
           brew install --cask docker
 
-          # Accept the Docker Desktop licence non-interactively.
-          # Try the CLI installer flag first (Docker Desktop ≥4.x).
-          sudo /Applications/Docker.app/Contents/MacOS/install \
-            --accept-license 2>/dev/null || true
-
-          # Pre-populate settings as a fallback for the licence key.
+          # Pre-populate settings so Docker Desktop skips the first-run wizard.
           mkdir -p "$HOME/Library/Group Containers/group.com.docker"
-          printf '{"licenseAgreement":"accepted","analyticsEnabled":false,"settingsVersion":20}\n' \
+          printf '{"licenseAgreement":"accepted","analyticsEnabled":false,"settingsVersion":20,"startAtLogin":false}\n' \
             > "$HOME/Library/Group Containers/group.com.docker/settings-store.json"
 
-          # Launch Docker Desktop directly (bypasses macOS open, avoids GUI session).
-          /Applications/Docker.app/Contents/MacOS/Docker --unattended &
+          # Launch Docker Desktop via open (required for GUI apps on macOS CI).
+          open --background /Applications/Docker.app
 
           # Docker Desktop ≥4.x may expose the socket at the user path before
           # /var/run/docker.sock is symlinked.  Accept either location.
@@ -132,13 +127,18 @@ jobs:
                 break 2
               fi
             done
-            if [ $((i % 20)) -eq 0 ]; then
-              echo "Still waiting... $((i*3))s elapsed"
-              pgrep -f "Docker" | head -3 || true
+            if [ $((i % 10)) -eq 0 ]; then
+              echo "=== $((i*3))s ==="
+              pgrep -la "Docker\|com.docker" 2>/dev/null | head -5 || echo "no Docker procs"
+              ls "$HOME/Library/Logs/Docker Desktop/" 2>/dev/null && \
+                tail -5 "$HOME/Library/Logs/Docker Desktop/"*.log 2>/dev/null || echo "no Docker logs yet"
+              ls -la /var/run/docker.sock "$HOME/.docker/run/docker.sock" 2>/dev/null || echo "no socket yet"
             fi
-            [ $i -eq 200 ] && { echo "Timeout. Docker logs:"; \
-              cat "$HOME/Library/Logs/Docker Desktop/"*.log 2>/dev/null | tail -30 || true; \
-              docker info 2>&1 || true; }
+            [ $i -eq 200 ] && {
+              echo "TIMEOUT - final diagnostics:"
+              cat "$HOME/Library/Logs/Docker Desktop/"*.log 2>/dev/null | tail -50 || true
+              docker info 2>&1 || true
+            }
             sleep 3
           done
 
