@@ -1,8 +1,8 @@
 # exa-jaffle-shop
 
-> **Exasol is validated across all three dbt engines** — the only database with confirmed PASS on the full Jaffle Shop suite for dbt-fusion, dbt-core v2 (Rust open-source), and dbt-core 1.x (Python) alike.
+**[Jaffle Shop](https://github.com/dbt-labs/jaffle-shop)** is the canonical dbt sandbox project maintained by dbt Labs. It models a fictional restaurant that sells jaffles (toasted sandwich pies) and covers the full dbt workflow: raw CSV seeds → staging views → analytics-ready mart tables. The domain spans customers, orders, order items, products, supplies, and store locations — small enough to understand in an afternoon, realistic enough to exercise dbt's core features.
 
-**[Jaffle Shop](https://github.com/dbt-labs/jaffle-shop)** is the canonical dbt sandbox maintained by dbt Labs: raw CSV seeds → staging views → analytics-ready mart tables, covering customers, orders, order items, products, supplies, and stores. This repository ports it to **[Exasol](https://www.exasol.com)** and validates it against the full dbt engine landscape.
+Using dbt with Exasol combines data orchestration with the high performance and scalability of an Exasol database. You can test this workflow with your existing Exasol database or set up a free Exasol instance via the [Exasol SaaS free trial](https://cloud.exasol.com) or the [Docker image](https://hub.docker.com/r/exasol/docker-db). This repository ports Jaffle Shop to **[Exasol](https://www.exasol.com)** and validates it against both dbt engines:
 
 | Engine | Version | Transport | Status |
 |--------|---------|-----------|--------|
@@ -23,10 +23,18 @@ You can run Exasol locally for free via the [Docker image](https://hub.docker.co
 docker compose up -d && sleep 30
 
 # 2. Install engines (first time only)
-curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update   # dbt-fusion
+
+# Engine: dbt-fusion
+curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update 
+
+# Engine: dbt-core v1 (Python)
 python3 -m venv .venv    && .venv/bin/pip install    "dbt-core==1.11.11" "dbt-exasol==1.10.6"
+
+# Engine: dbt-core v2 (Rust)
 python3 -m venv .venv-v2 && .venv-v2/bin/pip install "dbt-core==2.0.0-alpha.1"
-curl -LsSf https://dbc.columnar.tech/install.sh | sh && dbc install exasol   # ADBC driver
+
+# Exasol ADBC driver (exarrow-rs)
+curl -LsSf https://dbc.columnar.tech/install.sh | sh && dbc install exasol
 
 # 3. Run
 make all
