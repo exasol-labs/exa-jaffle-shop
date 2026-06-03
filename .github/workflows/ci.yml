@@ -108,11 +108,26 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew install --cask docker
+
+          # Pre-accept the Docker Desktop licence so the daemon starts headlessly.
+          mkdir -p "$HOME/Library/Group Containers/group.com.docker"
+          printf '{"licenseAgreement":"accepted","analyticsEnabled":false}\n' \
+            > "$HOME/Library/Group Containers/group.com.docker/settings-store.json"
+
+          # Launch Docker Desktop; the daemon runs inside a LinuxKit VM.
           open --background /Applications/Docker.app
-          # Wait up to 5 min for Docker Desktop daemon to be ready
-          for i in $(seq 1 100); do
-            docker info &>/dev/null 2>&1 && { echo "Docker ready after $((i*3))s"; break; }
-            [ $i -eq 100 ] && { echo "Docker Desktop did not start in time"; docker info; }
+
+          # Docker Desktop ≥4.x may expose the socket at the user path before
+          # /var/run/docker.sock is symlinked.  Accept either location.
+          for i in $(seq 1 200); do
+            for sock in /var/run/docker.sock "$HOME/.docker/run/docker.sock"; do
+              if [ -S "$sock" ] && DOCKER_HOST="unix://$sock" docker info &>/dev/null 2>&1; then
+                echo "Docker ready via $sock after $((i*3))s"
+                echo "DOCKER_HOST=unix://$sock" >> "$GITHUB_ENV"
+                break 2
+              fi
+            done
+            [ $i -eq 200 ] && { echo "Docker Desktop did not start in time"; docker info; }
             sleep 3
           done
 
