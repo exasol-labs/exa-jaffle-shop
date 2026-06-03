@@ -94,10 +94,14 @@ jobs:
         uses: actions/checkout@v4
 
       # ── Install Docker (macOS only) ───────────────────────────────────────
-      # macOS ARM runners do not ship Docker. Use Docker's official action.
-      - name: Set up Docker (macOS)
+      # macOS ARM runners do not ship Docker. Install Docker Desktop via brew
+      # cask — it uses Apple's Virtualization.framework directly (no QEMU).
+      - name: Install and start Docker Desktop (macOS)
         if: matrix.os == 'macos-latest'
-        uses: docker/setup-docker-action@v5
+        run: |
+          brew install --cask docker
+          open --background -a Docker
+          until docker info &>/dev/null 2>&1; do sleep 3; done
 
       # ── Load Exasol Docker image from cache (Linux only) ─────────────────
       # macOS pulls exasol/nano:latest directly (small image, arm64 native).
