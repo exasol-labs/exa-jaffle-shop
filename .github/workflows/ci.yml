@@ -94,18 +94,10 @@ jobs:
         uses: actions/checkout@v4
 
       # ── Install Docker (macOS only) ───────────────────────────────────────
-      # macOS ARM runners do not ship Docker. Use the Lima team's action which
-      # installs a pinned Lima version known to work in GitHub CI.
-      - name: Set up Lima + Docker (macOS)
+      # macOS ARM runners do not ship Docker. Use Docker's official action.
+      - name: Set up Docker (macOS)
         if: matrix.os == 'macos-latest'
-        id: setup-lima
-        uses: lima-vm/setup-lima@v2
-        with:
-          template: docker
-
-      - name: Export DOCKER_HOST (macOS)
-        if: matrix.os == 'macos-latest'
-        run: echo "DOCKER_HOST=unix://$HOME/.lima/docker/sock/docker.sock" >> "$GITHUB_ENV"
+        uses: docker/setup-docker-action@v5
 
       # ── Load Exasol Docker image from cache (Linux only) ─────────────────
       # macOS pulls exasol/nano:latest directly (small image, arm64 native).
