@@ -6,8 +6,28 @@ on:
   pull_request:
 
 jobs:
+  # Pull the Exasol Docker image once and cache it so the three Linux matrix
+  # jobs load from cache instead of each downloading ~2 GB independently.
+  pull-docker:
+    name: Pull Exasol Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cache Exasol Docker image
+        id: cache-docker
+        uses: actions/cache@v4
+        with:
+          path: /tmp/exasol-docker.tar.gz
+          key: docker-exasol-2026.1.0
+
+      - name: Pull and export Exasol Docker image
+        if: steps.cache-docker.outputs.cache-hit != 'true'
+        run: |
+          docker pull exasol/docker-db:2026.1.0
+          docker save exasol/docker-db:2026.1.0 | gzip > /tmp/exasol-docker.tar.gz
+
   dbt:
     name: dbt (${{ matrix.engine }}, ${{ matrix.os }})
+    needs: pull-docker
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     continue-on-error: ${{ matrix.continue-on-error }}
@@ -21,18 +41,21 @@ jobs:
             engine: dbt-core-python
             dbt-target: python
             use-docker: true
+            needs-init-db: false   # dbt-exasol creates schemas automatically
             continue-on-error: false
 
           - os: ubuntu-latest
             engine: dbt-core-v2
             dbt-target: dev
             use-docker: true
+            needs-init-db: true    # ADBC driver cannot create schemas
             continue-on-error: true   # alpha release
 
           - os: ubuntu-latest
             engine: dbt-fusion
             dbt-target: dev
             use-docker: true
+            needs-init-db: true    # ADBC driver cannot create schemas
             continue-on-error: false
 
           # ── macOS ARM (Exasol via external instance — secrets required) ──
@@ -41,18 +64,21 @@ jobs:
             engine: dbt-core-python
             dbt-target: python
             use-docker: false
+            needs-init-db: false
             continue-on-error: true
 
           - os: macos-latest
             engine: dbt-core-v2
             dbt-target: dev
             use-docker: false
+            needs-init-db: true
             continue-on-error: true
 
           - os: macos-latest
             engine: dbt-fusion
             dbt-target: dev
             use-docker: false
+            needs-init-db: true
             continue-on-error: true
 
     env:
@@ -79,6 +105,18 @@ jobs:
         run: |
           echo "EXASOL_HOST=${_HOST}" >> "$GITHUB_ENV"
           echo "EXASOL_PASSWORD=${_PASSWORD}" >> "$GITHUB_ENV"
+
+      # ── Load Exasol Docker image from cache (Linux only) ─────────────────
+      - name: Restore Exasol Docker image from cache
+        if: matrix.use-docker
+        uses: actions/cache@v4
+        with:
+          path: /tmp/exasol-docker.tar.gz
+          key: docker-exasol-2026.1.0
+
+      - name: Load Exasol Docker image
+        if: matrix.use-docker
+        run: docker load < /tmp/exasol-docker.tar.gz
 
       # ── Start Exasol (Linux / Docker only) ────────────────────────────────
       # services: does not support --privileged; use docker run instead.
@@ -114,6 +152,14 @@ jobs:
       - name: Wait for Exasol to be ready (external)
         if: '!matrix.use-docker'
         run: bash scripts/wait_for_exasol.sh "" 120
+
+      # ── Initialize database (ADBC engines only) ──────────────────────────
+      # dbt-exasol creates schemas automatically; the ADBC driver cannot.
+      # init_db.sql creates JAFFLE_SHOP + JAFFLE_SHOP_RAW and pre-creates
+      # seed tables with correct Exasol types (no TEXT, no unsupported DDL).
+      - name: Initialize Exasol database
+        if: matrix.needs-init-db
+        run: exapump sql --profile ci < scripts/init_db.sql
 
       # ── dbt-core-python setup ─────────────────────────────────────────────
       - name: Set up Python

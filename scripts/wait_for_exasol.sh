@@ -15,7 +15,7 @@
 #   EXASOL_PASSWORD (default: exasol)
 set -euo pipefail
 
-CONTAINER="${1:-exasol}"
+CONTAINER="${1-exasol}"  # ${1-default} keeps empty string; ${1:-default} would replace it
 MAX_WAIT="${2:-600}"
 INTERVAL=5
 
