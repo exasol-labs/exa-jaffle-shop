@@ -100,8 +100,13 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew install --cask docker
-          open --background -a Docker
-          until docker info &>/dev/null 2>&1; do sleep 3; done
+          open --background /Applications/Docker.app
+          # Wait up to 120 s for the Docker daemon to be ready
+          for i in $(seq 1 40); do
+            docker info &>/dev/null 2>&1 && break
+            sleep 3
+          done
+          docker info
 
       # ── Load Exasol Docker image from cache (Linux only) ─────────────────
       # macOS pulls exasol/nano:latest directly (small image, arm64 native).
