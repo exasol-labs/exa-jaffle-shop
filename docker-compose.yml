@@ -1,6 +1,6 @@
 services:
   exasol:
-    image: exasol/docker-db:latest
+    image: exasol/docker-db:2026.1.0
     ports:
       - "8563:8563"
       - "2580:2580"

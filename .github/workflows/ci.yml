@@ -91,7 +91,7 @@ jobs:
             --shm-size=2g \
             -e COSLWD_ENABLED=1 \
             -p 8563:8563 \
-            exasol/docker-db:2025.2.0
+            exasol/docker-db:2026.1.0
 
       # ── Install exapump (health probe, cross-platform) ────────────────────
       - name: Install exapump

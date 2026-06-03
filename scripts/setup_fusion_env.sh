@@ -43,6 +43,16 @@ case "$(uname -s)" in
         DRIVER_DIR="$HOME/Library/Application Support/ADBC/Drivers/exasol_darwin_${ARCH}_v${EXASOL_VER}"
         export DYLD_LIBRARY_PATH="${DRIVER_DIR}${DYLD_LIBRARY_PATH:+:${DYLD_LIBRARY_PATH}}"
         ENV_VAR="DYLD_LIBRARY_PATH"
+
+        # Hardened-runtime binaries (e.g. dbt-fusion) silently strip DYLD_LIBRARY_PATH.
+        # Symlinking the driver into /opt/homebrew/lib/ is the only reliable path on macOS.
+        DYLIB="${DRIVER_DIR}/libadbc_driver_exasol.dylib"
+        HOMEBREW_LIB="/opt/homebrew/lib"
+        if [[ -f "$DYLIB" && -d "$HOMEBREW_LIB" ]]; then
+            ln -sf "$DYLIB" "${HOMEBREW_LIB}/libadbc_driver_exasol.dylib"
+            echo "OK  symlink -> ${HOMEBREW_LIB}/libadbc_driver_exasol.dylib"
+        fi
+        unset DYLIB HOMEBREW_LIB
         ;;
     MINGW*|MSYS*|CYGWIN*)
         DRIVER_DIR="${LOCALAPPDATA//\\//}/ADBC/drivers/exasol_windows_${ARCH}_v${EXASOL_VER}"
