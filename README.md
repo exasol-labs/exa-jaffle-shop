@@ -1,66 +1,105 @@
 # exa-jaffle-shop
 
-**[Jaffle Shop](https://github.com/dbt-labs/jaffle-shop)** is the canonical dbt sandbox project maintained by dbt Labs. It models a fictional restaurant that sells jaffles (toasted sandwich pies) and covers the full dbt workflow: raw CSV seeds → staging views → analytics-ready mart tables. The domain spans customers, orders, order items, products, supplies, and store locations — small enough to understand in an afternoon, realistic enough to exercise dbt's core features.
+> **Exasol is validated across all three dbt engines** — the only database with confirmed PASS on the full Jaffle Shop suite for dbt-fusion, dbt-core v2 (Rust open-source), and dbt-core 1.x (Python) alike.
 
-Using dbt with Exasol combines data orchestration with the high performance and scalability of an Exasol database. You can test this workflow with your existing Exasol database or set up a free Exasol instance via the [Exasol SaaS free trial](https://cloud.exasol.com) or the [Docker image](https://hub.docker.com/r/exasol/docker-db). This repository ports Jaffle Shop to **[Exasol](https://www.exasol.com)** and validates it against both dbt engines:
+**[Jaffle Shop](https://github.com/dbt-labs/jaffle-shop)** is the canonical dbt sandbox maintained by dbt Labs: raw CSV seeds → staging views → analytics-ready mart tables, covering customers, orders, order items, products, supplies, and stores. This repository ports it to **[Exasol](https://www.exasol.com)** and validates it against the full dbt engine landscape.
 
-| Engine | Transport | Status |
-|--------|-----------|--------|
-| [dbt-fusion](https://github.com/dbt-labs/dbt-fusion) | Rust / ADBC ([exarrow-rs](https://github.com/exasol-labs/exarrow-rs)) | **PASS** (fix branch) |
-| [dbt-core](https://github.com/dbt-labs/dbt-core) + [dbt-exasol](https://alligatorcompany.gitlab.io/dbt-exasol) | Python / pyexasol | **PASS** |
+| Engine | Version | Transport | Status |
+|--------|---------|-----------|--------|
+| [dbt-fusion](https://github.com/dbt-labs/dbt-fusion) | 2.0.0-preview.183 | Rust / ADBC ([exarrow-rs](https://github.com/exasol-labs/exarrow-rs)) | **PASS** (6 seeds · 9 models) |
+| [dbt-core v2](https://github.com/dbt-labs/dbt-core) | 2.0.0-alpha.1 | Rust / ADBC ([exarrow-rs](https://github.com/exasol-labs/exarrow-rs)) | **PASS** (6 seeds · 9 models) |
+| [dbt-core 1.x](https://github.com/dbt-labs/dbt-core) + [dbt-exasol](https://alligatorcompany.gitlab.io/dbt-exasol) | 1.11.11 / 1.10.6 | Python / [pyexasol](https://github.com/exasol/pyexasol) | **PASS** (6 seeds · 9 models) |
 
-Seeds load raw data, 6 staging views transform it, and 3 mart tables join everything together. PASS=9 on both engines.
+You can run Exasol locally for free via the [Docker image](https://hub.docker.com/r/exasol/docker-db) or sign up for a [free SaaS trial](https://cloud.exasol.com).
+
+---
 
 ## Quick Start
 
-### dbt-fusion
-
-> **Note:** The current release binary has a known seed issue — see [dbt-fusion Known Issues](#dbt-fusion-known-issues).
+### One-shot: all three engines
 
 ```bash
 # 1. Start Exasol
 docker compose up -d && sleep 30
 
-# 2. Install dbt-fusion
-curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
-
-# 3. Install the Exasol ADBC driver
-curl -LsSf https://dbc.columnar.tech/install.sh | sh
-dbc install exasol
-
-# 4. Set environment (detects Linux / macOS / Windows automatically)
-source scripts/setup_fusion_env.sh
-
-# 5. Run
-dbt deps
-dbt seed
-dbt run
-```
-
-The script sets `DBT_ALLOW_EXPERIMENTAL_ADAPTERS=1` and the correct library path variable
-for your OS (`LD_LIBRARY_PATH` on Linux, `DYLD_LIBRARY_PATH` on macOS, `PATH` on Windows).
-Add `source /path/to/exa-jaffle-shop/scripts/setup_fusion_env.sh` to your shell profile
-to make it permanent.
-
-### dbt-core (Python)
-
-```bash
-# 1. Start Exasol
-docker compose up -d && sleep 30
-
-# 2. Install dbt-exasol (pulls dbt-core and pyexasol automatically)
-python3 -m venv .venv
-.venv/bin/pip install dbt-exasol
+# 2. Install engines (first time only)
+curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update   # dbt-fusion
+python3 -m venv .venv    && .venv/bin/pip install    "dbt-core==1.11.11" "dbt-exasol==1.10.6"
+python3 -m venv .venv-v2 && .venv-v2/bin/pip install "dbt-core==2.0.0-alpha.1"
+curl -LsSf https://dbc.columnar.tech/install.sh | sh && dbc install exasol   # ADBC driver
 
 # 3. Run
+make all
+```
+
+`make all` calls `make init` (creates schemas and seed tables with correct DDL via
+[exapump](https://github.com/exasol-labs/exapump)), then runs all three engines in turn.
+
+### Individual engines
+
+```bash
+make init         # always run first for Rust engines (idempotent)
+make run-fusion   # dbt-fusion  — Rust/ADBC
+make run-v2       # dbt-core v2 — Rust/ADBC
+make run-python   # dbt-core 1.x — Python/pyexasol
+make clean        # remove target/ and dbt_packages/
+```
+
+Override connection settings via environment variables:
+
+```bash
+EXASOL_HOST=my.exasol.cloud EXASOL_PASSWORD=secret make all
+```
+
+---
+
+## Detailed Quick Start
+
+### dbt-fusion
+
+```bash
+docker compose up -d && sleep 30
+curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh | sh -s -- --update
+curl -LsSf https://dbc.columnar.tech/install.sh | sh && dbc install exasol
+source scripts/setup_fusion_env.sh   # sets LD_LIBRARY_PATH + DBT_ALLOW_EXPERIMENTAL_ADAPTERS
+make init
+dbt deps && dbt seed && dbt run
+```
+
+### dbt-core v2 (Rust, open-source)
+
+dbt-core v2 and dbt-fusion share the same Rust engine and Exasol ADBC adapter.
+dbt-fusion ships as a prebuilt binary; dbt-core v2 is the pip-installable open-source package.
+
+```bash
+docker compose up -d && sleep 30
+python3 -m venv .venv-v2
+.venv-v2/bin/pip install "dbt-core==2.0.0-alpha.1"
+curl -LsSf https://dbc.columnar.tech/install.sh | sh && dbc install exasol
+source scripts/setup_fusion_env.sh
+make init
+.venv-v2/bin/dbt deps && .venv-v2/bin/dbt seed && .venv-v2/bin/dbt run
+```
+
+### dbt-core 1.x (Python)
+
+```bash
+docker compose up -d && sleep 30
+python3 -m venv .venv
+.venv/bin/pip install "dbt-core==1.11.11" "dbt-exasol==1.10.6"
 .venv/bin/dbt deps
 .venv/bin/dbt seed --target python
-.venv/bin/dbt run --target python
+.venv/bin/dbt run  --target python
 ```
+
+The Python engine does not require `make init` — dbt-exasol creates schemas and tables with
+correct Exasol types automatically.
+
+---
 
 ## Configuration
 
-`profiles.yml` is included in the repository and pre-configured for the Exasol Docker container with default credentials. Override via environment variables:
+`profiles.yml` is pre-configured for the Exasol Docker container. Override via environment variables:
 
 | Variable | Default | Description |
 |---|---|---|
@@ -69,90 +108,91 @@ python3 -m venv .venv
 | `EXASOL_USER` | `sys` | Database user |
 | `EXASOL_PASSWORD` | `exasol` | Password |
 
-> **TLS note:** Exasol Docker uses a self-signed certificate. `profiles.yml` sets `certificate_validation: false` (dbt-fusion) and `validate_server_certificate: false` (dbt-exasol). Do not use this in production.
+> **TLS note:** Exasol Docker uses a self-signed certificate. `profiles.yml` sets
+> `certificate_validation: false` (Rust engines) and `validate_server_certificate: false`
+> (dbt-exasol). Do not use this in production.
 
-> **Schema casing:** Exasol stores identifiers as uppercase. `profiles.yml` uses uppercase `JAFFLE_SHOP` and `sources.yml` sets `quoting: identifier: false` so dbt passes identifiers unquoted (case-insensitive).
+> **Schema casing:** Exasol stores identifiers as uppercase. `profiles.yml` uses
+> `JAFFLE_SHOP` and `sources.yml` sets `quoting: identifier: false`.
 
-## dbt-fusion Known Issues
+---
 
-The released binary `2.0.0-preview.178` panics during `dbt seed`:
+## How `make init` works
 
-```
-panic: not yet implemented
-  at crates/sdf-adapter/src/sql_types.rs:207
-```
+The Rust-based engines (dbt-fusion, dbt-core v2) have two known adapter bugs that `make init`
+works around:
 
-Tracked in [issue #2231](https://github.com/dbt-labs/dbt-fusion/issues/2231); fix submitted in [PR #2232](https://github.com/dbt-labs/dbt-fusion/pull/2232). Once merged and a new preview is released, the Quick Start steps above will work as-is.
+| Bug | Symptom | Workaround |
+|-----|---------|------------|
+| Seed DDL emits `TEXT` type | Exasol has no `TEXT` type | `scripts/init_db.sql` pre-creates seed tables with `VARCHAR(2000000)`; `+full_refresh: false` makes dbt seed `TRUNCATE + INSERT` into them instead of `DROP + CREATE` |
+| ADBC driver formats timestamps as ISO 8601 (`T` separator) | Exasol default NLS expects a space | `scripts/init_db.sql` runs `ALTER SYSTEM SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DDTHH24:MI:SS.FF6'`; pyexasol's IMPORT FROM CSV also benefits since it passes raw CSV strings to Exasol's parser |
 
+`make init` is idempotent — it uses `CREATE SCHEMA IF NOT EXISTS` and `CREATE OR REPLACE TABLE`.
+
+---
 
 ## Exasol Support for dbt
 
-| Engine | Adapter | Transport | Tested version |
-|--------|---------|-----------|----------------|
-| [dbt-core](https://github.com/dbt-labs/dbt-core) | [dbt-exasol](https://alligatorcompany.gitlab.io/dbt-exasol) | Python / [pyexasol](https://github.com/exasol/pyexasol) | dbt-core 1.11.11 / dbt-exasol 1.10.6 |
-| [dbt-fusion](https://github.com/dbt-labs/dbt-fusion) | [exarrow-rs](https://github.com/exasol-labs/exarrow-rs) | Rust / ADBC | fix pending on [`fix/exasol-adapt-seed-type`](https://github.com/marconae/dbt-fusion-fork/tree/fix/exasol-adapt-seed-type) |
+| Engine | Adapter | Transport | Tested |
+|--------|---------|-----------|--------|
+| dbt-core 1.x | [dbt-exasol 1.10.6](https://alligatorcompany.gitlab.io/dbt-exasol) | Python / pyexasol | dbt-core 1.11.11 |
+| dbt-fusion | [exarrow-rs](https://github.com/exasol-labs/exarrow-rs) (built-in) | Rust / ADBC | 2.0.0-preview.183 |
+| dbt-core v2 | [exarrow-rs](https://github.com/exasol-labs/exarrow-rs) (built-in) | Rust / ADBC | 2.0.0-alpha.1 |
 
-### dbt-fusion Support
+### dbt-fusion and dbt-core v2
 
-Exasol support was contributed to [dbt-labs/dbt-fusion](https://github.com/dbt-labs/dbt-fusion) via two PRs:
+Exasol support was contributed to dbt-fusion via two PRs:
 
-| PR | Title | Merged | Key commits | What it adds |
-|----|-------|--------|-------------|--------------|
-| [#1615](https://github.com/dbt-labs/dbt-fusion/pull/1615) | feature: exasol connector | 2026-04-28 | `82535e42` | Core Exasol backend (`Backend::Exasol`) via [exarrow-rs](https://github.com/exasol-labs/exarrow-rs) ADBC driver; authentication, adapter, schema, init, df-providers |
-| [#1645](https://github.com/dbt-labs/dbt-fusion/pull/1645) | feature/exasol-connector-follow-up | 2026-05-06 | `735b508f` | System Load Strategy, Naming Strategy, identifier casing, metadata support |
+| PR | Title | Merged | What it adds |
+|----|-------|--------|--------------|
+| [#1615](https://github.com/dbt-labs/dbt-fusion/pull/1615) | feature: exasol connector | 2026-04-28 | Core Exasol backend via [exarrow-rs](https://github.com/exasol-labs/exarrow-rs) ADBC |
+| [#1645](https://github.com/dbt-labs/dbt-fusion/pull/1645) | feature/exasol-connector-follow-up | 2026-05-06 | Load strategy, naming, identifier casing, metadata |
 
-Both PRs are merged into `dbt-labs/dbt-fusion` main. The Exasol adapter code is compiled into the latest binary (`2.0.0-preview.178`) but sits behind an **experimental adapter gate** controlled by `DBT_ALLOW_EXPERIMENTAL_ADAPTERS`.
+Both are merged to main. dbt-fusion and dbt-core v2 share the same Rust engine; issue tracking
+for both lives at [dbt-labs/dbt-core](https://github.com/dbt-labs/dbt-core). The adapter is
+compiled into the binary behind the `DBT_ALLOW_EXPERIMENTAL_ADAPTERS` gate
+(`scripts/setup_fusion_env.sh` sets this automatically).
 
-```
-# in crates/dbt-loader/src/load_profiles.rs
-fn experimental_adapters_allowed() -> bool {
-    !dbt_env::env_var_is_disabled(ALLOW_EXPERIMENTAL_ADAPTERS_ENV)
-    // "DBT_ALLOW_EXPERIMENTAL_ADAPTERS"
-}
-```
-
-The ADBC driver lives at [exasol-labs/exarrow-rs](https://github.com/exasol-labs/exarrow-rs), a Rust ADBC implementation for Exasol.
-
+---
 
 ## Exasol SQL Compatibility Notes
 
-Four issues were found and fixed relative to the original jaffle-shop SQL:
+Four issues were fixed relative to the upstream jaffle-shop SQL:
 
 | Issue | Fix |
 |---|---|
-| `source` is a reserved word in Exasol | Renamed staging CTEs from `source` to `src` |
-| `final` is a reserved word in Exasol | Renamed mart CTEs from `final` to `mart` |
-| CTE names matching the table being created cause resolution errors | Renamed top-level mart CTEs to `base_*` |
+| `source` is a reserved word | Renamed staging CTEs from `source` to `src` |
+| `final` is a reserved word | Renamed mart CTEs from `final` to `mart` |
+| CTE name matching the target table causes resolution errors | Renamed top-level mart CTEs to `base_*` |
 | `USING (col)` across multiple joins is ambiguous | Replaced with explicit `ON a.col = b.col` |
 
-Three Exasol-specific macro overrides are in `macros/exasol_overrides.sql`:
+Three Exasol-specific macro overrides live in `macros/exasol_overrides.sql`:
 
 | Macro | Override | Reason |
 |---|---|---|
 | `dbt.type_string()` | `VARCHAR(2000000)` | Exasol has no `TEXT` type |
-| `dbt.hash()` | uses `HASH_MD5()` | Exasol uses `HASH_MD5` not `MD5` |
+| `dbt.hash()` | `HASH_MD5()` | Exasol uses `HASH_MD5` not `MD5` |
+
+---
 
 ## Project Structure
 
 ```
+Makefile                      # init + run-fusion / run-v2 / run-python / all / clean
+scripts/
+  init_db.sql                 # NLS fix + CREATE SCHEMA + CREATE TABLE (Rust engines)
+  setup_fusion_env.sh         # LD_LIBRARY_PATH + DBT_ALLOW_EXPERIMENTAL_ADAPTERS
+  wait_for_exasol.sh          # exapump-based readiness probe
 models/
-  staging/         # Views: rename & lightly transform raw tables
-    stg_customers.sql
-    stg_orders.sql
-    stg_locations.sql
-    stg_order_items.sql
-    stg_products.sql
-    stg_supplies.sql
-  marts/           # Tables: join staging models into analytics-ready facts/dims
-    customers.sql
-    orders.sql
-    order_items.sql
+  staging/                    # Views: rename & lightly transform raw tables
+  marts/                      # Tables: join staging into analytics-ready facts/dims
 macros/
-  cents_to_dollars.sql
-  exasol_overrides.sql    # Exasol-specific: type_string, hash
+  exasol_overrides.sql        # type_string, hash
 seeds/
-  jaffle-data/     # Raw CSV data loaded into the raw schema
+  jaffle-data/                # Raw CSV data → JAFFLE_SHOP_RAW schema
 ```
+
+---
 
 ## License
 

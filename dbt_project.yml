@@ -22,6 +22,7 @@ quoting:
 seeds:
   exa_jaffle_shop:
     +schema: raw
+    +full_refresh: false   # Rust engines pre-create tables via init_db.sql; dbt seed TRUNCATE+INSERTs
 
 models:
   exa_jaffle_shop:

@@ -7,24 +7,56 @@ on:
 
 jobs:
   dbt:
-    name: dbt (${{ matrix.engine }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    name: dbt (${{ matrix.engine }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     continue-on-error: ${{ matrix.continue-on-error }}
 
     strategy:
       fail-fast: false
       matrix:
         include:
-          - engine: dbt-core
-            dbt-target: python   # profiles.yml output: python (dbt-exasol / pyexasol)
+          # ── Linux x86_64 (Exasol via Docker) ──────────────────────────
+          - os: ubuntu-latest
+            engine: dbt-core-python
+            dbt-target: python
+            use-docker: true
             continue-on-error: false
 
-          - engine: dbt-fusion
-            dbt-target: dev      # profiles.yml output: dev (dbt-fusion / ADBC)
-            continue-on-error: true   # known panic at sql_types.rs:207 — issue #2231
+          - os: ubuntu-latest
+            engine: dbt-core-v2
+            dbt-target: dev
+            use-docker: true
+            continue-on-error: true   # alpha release
+
+          - os: ubuntu-latest
+            engine: dbt-fusion
+            dbt-target: dev
+            use-docker: true
+            continue-on-error: false
+
+          # ── macOS ARM (Exasol via external instance — secrets required) ──
+          # exasol/docker-db is linux/amd64 only; native arm64 packages used for dbt
+          - os: macos-latest
+            engine: dbt-core-python
+            dbt-target: python
+            use-docker: false
+            continue-on-error: true
+
+          - os: macos-latest
+            engine: dbt-core-v2
+            dbt-target: dev
+            use-docker: false
+            continue-on-error: true
+
+          - os: macos-latest
+            engine: dbt-fusion
+            dbt-target: dev
+            use-docker: false
+            continue-on-error: true
 
     env:
+      # Docker-local defaults; overridden by the "Configure external Exasol" step on macOS.
       EXASOL_HOST: localhost
       EXASOL_PORT: "8563"
       EXASOL_USER: sys
@@ -32,13 +64,26 @@ jobs:
       DBT_PROFILES_DIR: ${{ github.workspace }}
 
     steps:
-      # ── Checkout ──────────────────────────────────────────────────────────────
+      # ── Checkout ──────────────────────────────────────────────────────────
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Start Exasol ──────────────────────────────────────────────────────────
+      # ── Configure external Exasol connection (macOS ARM only) ─────────────
+      # exasol/docker-db is linux/amd64 only; macOS jobs target an external instance.
+      # Requires EXASOL_HOST and EXASOL_PASSWORD repository secrets.
+      - name: Configure external Exasol connection
+        if: '!matrix.use-docker'
+        env:
+          _HOST: ${{ secrets.EXASOL_HOST }}
+          _PASSWORD: ${{ secrets.EXASOL_PASSWORD }}
+        run: |
+          echo "EXASOL_HOST=${_HOST}" >> "$GITHUB_ENV"
+          echo "EXASOL_PASSWORD=${_PASSWORD}" >> "$GITHUB_ENV"
+
+      # ── Start Exasol (Linux / Docker only) ────────────────────────────────
       # services: does not support --privileged; use docker run instead.
       - name: Start Exasol container
+        if: matrix.use-docker
         run: |
           docker run -d \
             --name exasol \
@@ -48,69 +93,111 @@ jobs:
             -p 8563:8563 \
             exasol/docker-db:2025.2.0
 
-      # ── Install exapump (readiness probe) ─────────────────────────────────────
+      # ── Install exapump (health probe, cross-platform) ────────────────────
       - name: Install exapump
         run: |
+          EXA_VER="0.9.2"
+          OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+          ARCH=$(uname -m)
+          [[ "$OS" == "darwin" ]] && OS="macos"
+          [[ "$ARCH" == "arm64" ]] && ARCH="aarch64"
           curl -fsSL \
-            https://github.com/exasol-labs/exapump/releases/download/v0.9.2/exapump-0.9.2-linux-x86_64 \
+            "https://github.com/exasol-labs/exapump/releases/download/v${EXA_VER}/exapump-${EXA_VER}-${OS}-${ARCH}" \
             -o /usr/local/bin/exapump
           chmod +x /usr/local/bin/exapump
 
-      # ── Wait for Exasol ───────────────────────────────────────────────────────
-      - name: Wait for Exasol to be ready
+      # ── Wait for Exasol ───────────────────────────────────────────────────
+      - name: Wait for Exasol to be ready (Docker)
+        if: matrix.use-docker
         run: bash scripts/wait_for_exasol.sh exasol 600
 
-      # ── dbt-core setup ────────────────────────────────────────────────────────
+      - name: Wait for Exasol to be ready (external)
+        if: '!matrix.use-docker'
+        run: bash scripts/wait_for_exasol.sh "" 120
+
+      # ── dbt-core-python setup ─────────────────────────────────────────────
       - name: Set up Python
-        if: matrix.engine == 'dbt-core'
+        if: matrix.engine == 'dbt-core-python'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Cache pip packages
-        if: matrix.engine == 'dbt-core'
+      - name: Cache pip packages (dbt-core-python)
+        if: matrix.engine == 'dbt-core-python'
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-dbt-exasol-1.11.11-1.10.6
+          key: pip-dbt-core-python-${{ matrix.os }}
 
       - name: Install dbt-core + dbt-exasol
-        if: matrix.engine == 'dbt-core'
+        if: matrix.engine == 'dbt-core-python'
         run: pip install "dbt-core==1.11.11" "dbt-exasol==1.10.6"
 
-      # ── dbt-fusion setup ──────────────────────────────────────────────────────
+      # ── dbt-core-v2 setup ─────────────────────────────────────────────────
+      - name: Set up Python (dbt-core-v2)
+        if: matrix.engine == 'dbt-core-v2'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache pip packages (dbt-core-v2)
+        if: matrix.engine == 'dbt-core-v2'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-dbt-core-v2-${{ matrix.os }}
+
+      - name: Install dbt-core v2
+        if: matrix.engine == 'dbt-core-v2'
+        run: pip install "dbt-core==2.0.0-alpha.1"
+
+      - name: Install Exasol ADBC driver (dbt-core-v2)
+        if: matrix.engine == 'dbt-core-v2'
+        run: |
+          curl -LsSf https://dbc.columnar.tech/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          dbc install exasol
+
+      # ── dbt-fusion setup ──────────────────────────────────────────────────
       - name: Install dbt-fusion
         if: matrix.engine == 'dbt-fusion'
         run: |
           curl -fsSL https://public.cdn.getdbt.com/fs/install/install.sh \
-            | sh -s -- --version 2.0.0-preview.178
+            | sh -s -- --update
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Install Exasol ADBC driver
+      - name: Install Exasol ADBC driver (dbt-fusion)
         if: matrix.engine == 'dbt-fusion'
         run: |
           curl -LsSf https://dbc.columnar.tech/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           dbc install exasol
 
-      # ── dbt_packages cache (both engines) ────────────────────────────────────
+      # ── dbt_packages cache (all engines) ─────────────────────────────────
       - name: Cache dbt_packages
         uses: actions/cache@v4
         with:
           path: dbt_packages
           key: dbt-packages-${{ hashFiles('package-lock.yml') }}
 
-      # ── dbt-core: deps + seed + run ───────────────────────────────────────────
-      - name: dbt deps + seed + run (dbt-core)
-        if: matrix.engine == 'dbt-core'
+      # ── dbt-core-python: deps + seed + run ───────────────────────────────
+      - name: dbt deps + seed + run (dbt-core-python)
+        if: matrix.engine == 'dbt-core-python'
         run: |
           dbt deps  --target ${{ matrix.dbt-target }}
           dbt seed  --target ${{ matrix.dbt-target }}
           dbt run   --target ${{ matrix.dbt-target }}
 
-      # ── dbt-fusion: deps + seed + run ─────────────────────────────────────────
-      # Expected to fail: panic in crates/sdf-adapter/src/sql_types.rs:207
-      # during dbt seed (issue #2231 / PR #2232 pending merge).
+      # ── dbt-core-v2: deps + seed + run ───────────────────────────────────
+      - name: dbt deps + seed + run (dbt-core-v2)
+        if: matrix.engine == 'dbt-core-v2'
+        run: |
+          source scripts/setup_fusion_env.sh
+          dbt deps --target ${{ matrix.dbt-target }}
+          dbt seed --target ${{ matrix.dbt-target }}
+          dbt run  --target ${{ matrix.dbt-target }}
+
+      # ── dbt-fusion: deps + seed + run ─────────────────────────────────────
       - name: dbt deps + seed + run (dbt-fusion)
         if: matrix.engine == 'dbt-fusion'
         run: |
@@ -119,11 +206,11 @@ jobs:
           dbt seed --target ${{ matrix.dbt-target }}
           dbt run  --target ${{ matrix.dbt-target }}
 
-      # ── Diagnostics ───────────────────────────────────────────────────────────
+      # ── Diagnostics ───────────────────────────────────────────────────────
       - name: Dump Exasol container logs
-        if: failure()
+        if: failure() && matrix.use-docker
         run: docker logs --tail 100 exasol 2>&1 || true
 
       - name: Stop Exasol container
-        if: always()
+        if: always() && matrix.use-docker
         run: docker rm -f exasol || true
